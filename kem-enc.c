@@ -57,6 +57,47 @@ int kem_encrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 	/* TODO: encapsulate random symmetric key (SK) using RSA and SHA256;
 	 * encrypt fnIn with SK; concatenate encapsulation and cihpertext;
 	 * write to fnOut. */
+	size_t len = rsa_numBytesN(K);
+	unsigned char* x = malloc(len);
+	printf("size %d\n\n", len);
+
+
+	randBytes(x, len);
+	SKE_KEY SK;
+	ske_keyGen(&SK, x, len);
+
+
+
+	size_t encapLen = len + HASHLEN;
+	unsigned char* encap = malloc(encapLen);
+
+	
+	if(len != rsa_encrypt(encap, x, len, K)){
+		printf("Failed to encrypt RSA\n");
+		return -1;
+	}
+
+
+	unsigned char* h = malloc(HASHLEN);
+	SHA256(x, len, h);
+
+	memcpy(encap+len, h, HASHLEN);
+
+	int fdout = open(fnOut, O_CREAT | O_RDWR, S_IRWXU);
+	if(fdout == -1){
+		printf("Failed to open files");
+		return -1;
+	}
+
+	write(fdout, encap, encapLen);
+	close(fdout);
+
+	
+	ske_encrypt_file(fnOut, fnIn, &SK, NULL, encapLen);
+
+	free(x);
+	free(encap);
+	free(h);
 	return 0;
 }
 
@@ -67,6 +108,102 @@ int kem_decrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 	/* step 1: recover the symmetric key */
 	/* step 2: check decapsulation */
 	/* step 3: derive key from ephemKey and decrypt data. */
+	size_t rsaLen = rsa_numBytesN(K);
+	size_t encapLen = rsaLen + HASHLEN;
+	printf("size %d\n\n", rsaLen);
+
+	FILE* encrypted = fopen(fnIn, "r");
+
+	unsigned char* encap = malloc(encapLen);
+	size_t read = fread(encap, 1, encapLen, encrypted);
+	fclose(encrypted);
+
+	if(read != encapLen){
+		printf("Failed to read kem");
+		return -1;
+	}
+
+	unsigned char* x = malloc(rsaLen);
+
+	if(rsaLen != rsa_decrypt(x, encap, rsaLen, K)){
+		printf("Failed to retrieve x");
+		return -1;
+	}
+
+	
+	unsigned char* h = malloc(HASHLEN);
+	SHA256(x, rsaLen, h);
+	unsigned char* a = encap + rsaLen;
+
+	for(int i = 0; i < HASHLEN; i++){ 
+		if(*h != *a){
+			printf("H(x) did not match\n");
+			return -1;
+		}
+		h++;
+		a++;
+	}
+
+	SKE_KEY SK;
+	ske_keyGen(&SK, x, rsaLen);
+	ske_decrypt_file(fnOut, fnIn, &SK, encapLen);
+	a = NULL;
+	free(h);
+	free(x);
+	free(encap);
+	return 0;
+}
+
+int generate(char* fnOut, size_t nBits){
+	RSA_KEY K;
+
+	char* fPub = malloc(strlen(fnOut) + 5);
+	strcpy(fPub, fnOut);
+	strcat(fPub, ".pub");
+
+	FILE* outPrivate = fopen(fnOut, "w");
+	FILE* outPublic = fopen(fPub, "w");
+
+	rsa_keyGen(nBits, &K);
+	rsa_writePrivate(outPrivate, &K);
+	rsa_writePublic(outPublic, &K);
+
+	fclose(outPrivate);
+	fclose(outPublic);
+	rsa_shredKey(&K);
+	free(fPub);
+	return 0;
+}
+
+int encrypt(char* fnOut, char* fnIn, char* fnKey){
+	FILE* keyFile = fopen(fnKey, "r");
+	printf("Key file: %s\n", fnKey);
+	if(keyFile == NULL){
+		printf("Key file does not exist\n");
+		return -1;
+	}
+
+	RSA_KEY K;
+	rsa_readPublic(keyFile, &K);
+	kem_encrypt(fnOut, fnIn, &K);
+	rsa_shredKey(&K);
+	fclose(keyFile);
+	return 0;
+}
+
+int decrypt(char* fnOut, char* fnIn, char* fnKey){
+	FILE* privateKey = fopen(fnKey, "r");
+	printf("Key file: %s\n", fnKey);
+	if(privateKey == NULL){
+		printf("Key file does not exist\n");
+		return -1;
+	}
+
+	RSA_KEY K;
+	rsa_readPrivate(privateKey, &K);
+	fclose(privateKey);
+	kem_decrypt(fnOut, fnIn, &K);
+	rsa_shredKey(&K);
 	return 0;
 }
 
