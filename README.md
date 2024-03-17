@@ -1,5 +1,7 @@
 # Computer Security Project 1 – CCA2 Hybrid Encryption
 
+## Members: Furqan Khan, Mohammed Mamun, and Tajwar Rahman
+
 ## _Due:_ Tuesday, March 12th @ 11:59pm
 
 ## Synopsis
