@@ -57,52 +57,42 @@ int kem_encrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 	/* TODO: encapsulate random symmetric key (SK) using RSA and SHA256;
 	 * encrypt fnIn with SK; concatenate encapsulation and cihpertext;
 	 * write to fnOut. */
-	size_t len = rsa_numBytesN(K); //length of key
+	size_t len = rsa_numBytesN(K);
 	unsigned char* x = malloc(len);
 	printf("size %d\n\n", len);
 
-	//generate SK
+
 	randBytes(x, len);
 	SKE_KEY SK;
 	ske_keyGen(&SK, x, len);
 
 
 
-	size_t encapLen = len + HASHLEN; //will be the RSA(X)|H(X)
+	size_t encapLen = len + HASHLEN;
 	unsigned char* encap = malloc(encapLen);
 
-	//set RSA(X)
+	
 	if(len != rsa_encrypt(encap, x, len, K)){
 		printf("Failed to encrypt RSA\n");
 		return -1;
 	}
 
-	//print unencrypted x
-	/*for(int i = 0; i < len; i++){*/
-		/*printf("%d : %hu\n", i, (unsigned short)(x[i]));*/
-	/*}*/
 
-
-	//create H(X)
 	unsigned char* h = malloc(HASHLEN);
 	SHA256(x, len, h);
 
-	//add H(x) to back
 	memcpy(encap+len, h, HASHLEN);
 
-	//out file
 	int fdout = open(fnOut, O_CREAT | O_RDWR, S_IRWXU);
 	if(fdout == -1){
 		printf("Failed to open files");
 		return -1;
 	}
 
-	//write encap to file
 	write(fdout, encap, encapLen);
 	close(fdout);
 
-	//encrypt plaintext with SK
-	//append to encap
+	
 	ske_encrypt_file(fnOut, fnIn, &SK, NULL, encapLen);
 
 	free(x);
@@ -124,12 +114,10 @@ int kem_decrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 
 	FILE* encrypted = fopen(fnIn, "r");
 
-	//get encapsulated -- RSA(X)|H(X)
 	unsigned char* encap = malloc(encapLen);
 	size_t read = fread(encap, 1, encapLen, encrypted);
 	fclose(encrypted);
 
-	//failed to read kem
 	if(read != encapLen){
 		printf("Failed to read kem");
 		return -1;
@@ -137,28 +125,17 @@ int kem_decrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 
 	unsigned char* x = malloc(rsaLen);
 
-	//retrieve x from RSA(X)
 	if(rsaLen != rsa_decrypt(x, encap, rsaLen, K)){
 		printf("Failed to retrieve x");
 		return -1;
 	}
 
-	//print decrypted x
-	//for some reason decrypted x does not match original x
-	/*for(int i = 0; i < rsaLen; i++){*/
-		/*printf("%d : %hu\n", i, (unsigned short) (x[i]));*/
-	/*}*/
-
-
-	//get H(X)
+	
 	unsigned char* h = malloc(HASHLEN);
 	SHA256(x, rsaLen, h);
 	unsigned char* a = encap + rsaLen;
 
-	//compare h to encapsulated H(x)
-	for(int i = 0; i < HASHLEN; i++){ //not matching for some reason
-		//printf("%hu\n", (unsigned short)(*h));
-		//printf("%hu\n", (unsigned short)(*a));
+	for(int i = 0; i < HASHLEN; i++){ 
 		if(*h != *a){
 			printf("H(x) did not match\n");
 			return -1;
@@ -180,7 +157,6 @@ int kem_decrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 int generate(char* fnOut, size_t nBits){
 	RSA_KEY K;
 
-	//create new file with .pub extension
 	char* fPub = malloc(strlen(fnOut) + 5);
 	strcpy(fPub, fnOut);
 	strcat(fPub, ".pub");
